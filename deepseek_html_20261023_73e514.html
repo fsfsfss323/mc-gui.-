@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Minecraft Client GUI — 2x2 Grid</title>
+<style>
+  :root{
+    --bg:#0b0d12;
+    --line:#232838;
+    --txt:#cdd3e0;
+    --dim:#5a6275;
+    --accent:#4fd1c5;
+    --accent-glow:rgba(79,209,197,.35);
+    --on:#4fd1c5;
+    --off:#39404f;
+    --mono:'JetBrains Mono','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(circle at 50% 45%, #141821 0%, #0b0d12 70%);
+    font-family:var(--mono);
+    color:var(--txt);
+    overflow:hidden;
+    user-select:none;
+  }
+
+  .hud{
+    position:fixed;top:14px;left:14px;
+    font-size:12px;color:var(--dim);line-height:1.55;pointer-events:none;
+  }
+  .hud b{color:var(--accent);font-weight:500}
+  .hud-r{
+    position:fixed;top:14px;right:14px;text-align:right;
+    font-size:12px;color:var(--dim);line-height:1.55;pointer-events:none;
+  }
+
+  .cross{
+    position:fixed;top:50%;left:50%;
+    width:22px;height:22px;transform:translate(-50%,-50%);
+    pointer-events:none;opacity:.3;
+  }
+  .cross:before,.cross:after{content:"";position:absolute;background:var(--txt)}
+  .cross:before{left:50%;top:0;width:1px;height:100%;transform:translateX(-.5px)}
+  .cross:after{top:50%;left:0;height:1px;width:100%;transform:translateY(-.5px)}
+
+  /* 2x2 grid, centered */
+  .grid{
+    position:fixed;
+    left:50%;top:54%;
+    transform:translate(-50%,-50%);
+    display:grid;
+    grid-template-columns:repeat(2,minmax(150px,1fr));
+    gap:18px 90px;           /* big horizontal gap so rings don't collide */
+    z-index:5;
+  }
+
+  .tab{
+    position:relative;
+    padding:16px 30px;
+    background:rgba(18,21,29,.9);
+    border:1px solid var(--line);
+    border-radius:8px;
+    font-size:14px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--dim);
+    cursor:pointer;
+    text-align:center;
+    transition:color .18s,border-color .18s,box-shadow .18s,background .18s;
+  }
+  .tab:hover{color:#9aa3b5;border-color:#2f3648}
+  .tab.active{
+    color:var(--accent);
+    border-color:rgba(79,209,197,.55);
+    box-shadow:0 0 0 1px var(--accent-glow),0 8px 30px -10px var(--accent-glow);
+    background:rgba(20,26,32,.95);
+  }
+
+  /* module fan layer */
+  .fan{
+    position:fixed;left:0;top:0;width:100%;height:100%;
+    pointer-events:none;z-index:4;
+  }
+  .node{
+    position:absolute;
+    transform:translate(-50%,-50%) scale(.7);
+    opacity:0;pointer-events:none;
+    transition:transform .22s cubic-bezier(.2,.9,.2,1),opacity .18s ease;
+    white-space:nowrap;
+  }
+  .node.show{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
+  .node .btn{
+    display:flex;align-items:center;gap:9px;
+    padding:8px 14px;
+    background:rgba(14,17,24,.95);
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:12.5px;
+    color:var(--txt);
+    cursor:pointer;
+    backdrop-filter:blur(4px);
+    transition:border-color .15s,box-shadow .15s,transform .12s;
+  }
+  .node .btn:hover{
+    border-color:var(--accent);
+    box-shadow:0 0 0 1px var(--accent-glow),0 6px 22px -8px var(--accent-glow);
+    transform:translateY(-1px);
+  }
+  .dot{
+    width:7px;height:7px;border-radius:50%;background:var(--off);
+    flex:0 0 auto;transition:background .15s,box-shadow .15s;
+  }
+  .node.on .dot{background:var(--on);box-shadow:0 0 8px var(--accent-glow)}
+  .node.on .btn{border-color:rgba(79,209,197,.45)}
+
+  .pop{
+    position:fixed;min-width:190px;
+    background:rgba(14,17,24,.98);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:12px 13px;font-size:12px;
+    opacity:0;transform:translateY(4px);pointer-events:none;
+    transition:opacity .15s,transform .15s;z-index:30;
+  }
+  .pop.show{opacity:1;transform:translateY(0);pointer-events:auto}
+  .pop h4{
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);font-weight:500;margin-bottom:9px;
+  }
+  .row{display:flex;justify-content:space-between;color:var(--dim);margin-bottom:9px}
+  .row span:last-child{color:var(--txt)}
+  input[type=range]{width:100%;-webkit-appearance:none;background:transparent;margin:3px 0 12px}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:11px;height:11px;border-radius:50%;
+    background:var(--accent);margin-top:-4.5px;box-shadow:0 0 8px var(--accent-glow);
+  }
+</style>
+</head>
+<body>
+
+  <div class="hud">
+    <div><b>fps</b> 240</div>
+    <div><b>ping</b> 18ms</div>
+    <div><b>xyz</b> 128 / 64 / -34</div>
+  </div>
+  <div class="hud-r">
+    <div><b>speed</b> 1.2</div>
+    <div><b>reach</b> 3.1</div>
+    <div><b>fly</b> off</div>
+  </div>
+
+  <div class="cross"></div>
+
+  <!-- 2x2 grid -->
+  <div class="grid" id="grid">
+    <div class="tab" data-cat="Combat">Combat</div>
+    <div class="tab" data-cat="Player">Player</div>
+    <div class="tab" data-cat="Visual">Visual</div>
+    <div class="tab" data-cat="Misc">Misc</div>
+  </div>
+
+  <div class="fan" id="fan"></div>
+  <div class="pop" id="pop"></div>
+
+<script>
+const CATS = {
+  Combat: [
+    {name:"Killaura",  on:true,  reach:3.1},
+    {name:"Reach",     on:true,  reach:3.4},
+    {name:"Criticals", on:false, reach:0},
+    {name:"Velocity",  on:true,  reach:0},
+  ],
+  Player: [
+    {name:"Scaffold",    on:false,reach:0},
+    {name:"ChestStealer",on:false,reach:0},
+    {name:"AutoArmor",   on:true, reach:0},
+    {name:"AntiAFK",     on:true, reach:0},
+  ],
+  Visual: [
+    {name:"ESP",       on:true, reach:0},
+    {name:"Tracers",   on:true, reach:0},
+    {name:"Chams",     on:false,reach:0},
+    {name:"Fullbright",on:true, reach:0},
+  ],
+  Misc: [
+    {name:"Timer", on:false,reach:0},
+    {name:"Blink", on:false,reach:0},
+    {name:"AutoArmor",on:true,reach:0},
+  ],
+};
+
+const fanEl = document.getElementById('fan');
+const popEl = document.getElementById('pop');
+let activeTab = null;
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=()=>selectTab(t.dataset.cat,t);
+});
+
+function selectTab(cat, tabEl){
+  if(activeTab===cat){
+    activeTab=null;
+    tabEl.classList.remove('active');
+    closeFan();
+    return;
+  }
+  activeTab=cat;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===tabEl));
+  openFan(cat, tabEl);
+}
+
+function closeFan(){ fanEl.innerHTML=''; popEl.classList.remove('show'); }
+
+function openFan(cat, tabEl){
+  closeFan();
+  const r = tabEl.getBoundingClientRect();
+  const cx = r.left + r.width/2;
+  const cy = r.top  + r.height/2;
+
+  // expand AWAY from screen center, so nodes don't cross the grid
+  const scx = window.innerWidth/2;
+  const scy = window.innerHeight/2;
+  const baseAngle = Math.atan2(cy-scy, cx-scx) * 180/Math.PI;
+
+  const mods = CATS[cat];
+  const R = 140;
+  const span = Math.min(130, 28*mods.length);
+  const start = baseAngle - span/2;
+
+  mods.forEach((m,i)=>{
+    const angle = (mods.length===1)
+      ? baseAngle
+      : start + (span/(mods.length-1))*i;
+    const rad = angle*Math.PI/180;
+    const x = cx + Math.cos(rad)*R;
+    const y = cy + Math.sin(rad)*R;
+
+    const node = document.createElement('div');
+    node.className='node'+(m.on?' on':'');
+    node.style.left=x+'px';
+    node.style.top =y+'px';
+    node.innerHTML=`<div class="btn"><span class="dot"></span>${m.name}</div>`;
+
+    const btn = node.querySelector('.btn');
+    btn.onclick=(e)=>{ e.stopPropagation(); m.on=!m.on; node.classList.toggle('on',m.on); };
+    btn.oncontextmenu=(e)=>{ e.preventDefault(); e.stopPropagation(); openPop(x,y,m); };
+
+    fanEl.appendChild(node);
+    requestAnimationFrame(()=>node.classList.add('show'));
+  });
+}
+
+function openPop(x,y,m){
+  popEl.style.left=Math.min(x+130, window.innerWidth-220)+'px';
+  popEl.style.top =Math.max(y-20, 10)+'px';
+  popEl.innerHTML=`
+    <h4>${m.name}</h4>
+    <div class="row"><span>enabled</span><span>${m.on?'true':'false'}</span></div>
+    <div class="row"><span>reach</span><span>${m.reach.toFixed(2)}</span></div>
+    <input type="range" min="0" max="6" step="0.1" value="${m.reach}" id="rng">
+  `;
+  const rng=popEl.querySelector('#rng');
+  rng.oninput=()=>{
+    m.reach=parseFloat(rng.value);
+    popEl.querySelectorAll('.row span')[1].textContent=m.reach.toFixed(2);
+  };
+  popEl.classList.add('show');
+}
+
+document.addEventListener('mousedown',(e)=>{
+  if(e.target.closest('.grid')) return;
+  if(e.target.closest('.node')||e.target.closest('.pop')) return;
+  if(activeTab){
+    activeTab=null;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    closeFan();
+  }
+});
+</script>
+</body>
+</html>
